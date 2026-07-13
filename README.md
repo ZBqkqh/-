@@ -2,6 +2,8 @@
 /그냥 코드 눌러서 코드 복사하세요
 /제미나이한테 질문해도 해결이 안돼요
 
+Seriously, what is going on? The way they're working is really weird. / Just copy the extraction code. / Even asking Gemini about the code doesn't solve the problem.
+
 
 
 
