@@ -4,9 +4,7 @@
 
 
 
-"Seriously, what is going on? The way they're working is really weird.
-Just copy the extraction code. 
-Even asking Gemini about the code doesn't solve the problem."
+"Seriously, what is going on? The way they're working is really weird. / Just copy the extraction code. / Even asking Gemini about the code doesn't solve the problem."
 
 
 
