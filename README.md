@@ -5,7 +5,7 @@ import math
 class MicroGameApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("조여라! 마이크로게임")
+        self.root.title("저그본능 바보")
         
         self.root.attributes('-fullscreen', True)
         self.root.update_idletasks()
@@ -45,7 +45,7 @@ class MicroGameApp:
         self.unbind_all()
         self.state = "MENU"
         
-        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/3, text="조여라! 마이크로게임", fill="white", font=("Arial", 80, "bold"))
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/3, text="저그본능 바보", fill="white", font=("Arial", 80, "bold"))
         
         self.btn_play = self.create_button(self.WIDTH/2 - 150, self.HEIGHT/2, 300, 80, "플레이", self.start_game_sequence)
         self.btn_settings = self.create_button(self.WIDTH/2 - 150, self.HEIGHT/2 + 100, 300, 80, "설정", self.show_settings)
