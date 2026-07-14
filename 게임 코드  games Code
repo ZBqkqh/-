@@ -1,0 +1,583 @@
+import random
+import math
+
+# ================= 게임 리스트 반환 (main.py에서 사용) =================
+def get_ch1_games():
+    return [
+        g_cake,
+        lambda a: g_mash(a, 'A', "A 연타해라!", 10),
+        lambda a: g_avoid(a, 5, False),
+        lambda a: g_count(a, 3, 7),
+        lambda a: g_catch(a, 150, 1),
+        lambda a: g_timing(a, 1.0),
+        lambda a: g_laser(a, 2),
+        lambda a: g_find(a, 4),
+        lambda a: g_math(a, 'add'),
+        g_dont_move,
+        lambda a: g_spam(a, 12, False),
+        lambda a: g_type(a, 3, False),
+        lambda a: g_memory(a, 3),
+        lambda a: g_clean(a, 5)
+    ] # 정확히 14개
+
+def get_ch2_games():
+    return [
+        lambda a: g_mash(a, 'space', "스페이스바 연타!", 15),
+        lambda a: g_avoid(a, 1, True), # 유도탄 피하기
+        g_stopwatch, # 스톱워치 멈추기
+        lambda a: g_catch(a, 100, 3), # 3개 동시에 받기
+        lambda a: g_timing(a, 1.5),
+        lambda a: g_find(a, 8),
+        lambda a: g_math(a, 'sub'),
+        g_jump, # 스페이스바로 장애물 넘기
+        lambda a: g_spam(a, 10, True), # 도망가는 버튼 누르기
+        lambda a: g_type(a, 4, True), # 4자리 숫자(비밀번호) 치기
+        lambda a: g_laser(a, 4),
+        lambda a: g_memory(a, 5),
+        g_balance, # 마우스 중앙 유지하기
+        lambda a: g_clean(a, 10)
+    ] # 다른 종류의 14개
+
+def get_endless_games():
+    return [
+        lambda a: g_math(a, 'mul'),
+        lambda a: g_mash(a, 'W', "W키 미친듯이 연타!", 25),
+        lambda a: g_avoid(a, 15, False), # 탄막 피하기
+        lambda a: g_catch(a, 50, 2), # 아주 좁은 패드
+        lambda a: g_timing(a, 2.0),
+        lambda a: g_find(a, 12),
+        lambda a: g_spam(a, 25, False),
+        lambda a: g_type(a, 6, False), # 6글자 치기
+        lambda a: g_memory(a, 8),
+        lambda a: g_clean(a, 15)
+    ] # 무한모드 전용 10개
+
+# ================= 범용 미니게임 함수들 =================
+
+def g_cake(app):
+    app.clear(); app.game_active = True; app.current_game_id = "cake"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 300, text="케이크를 잘라라! (드래그 2번)", fill="yellow", font=("Arial", 60, "bold"))
+    cx, cy = app.WIDTH/2, app.HEIGHT/2
+    radius = 150
+    app.canvas.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill="#f4d03f", outline="white", width=5)
+    app.cuts = 0; app.start_pos = None
+
+    def on_press(e): app.start_pos = (e.x, e.y)
+    def on_release(e):
+        if not app.game_active or not app.start_pos: return
+        sx, sy = app.start_pos; ex, ey = e.x, e.y
+        if math.dist((sx, sy), (ex, ey)) > 100:
+            app.canvas.create_line(sx, sy, ex, ey, fill="white", width=4)
+            app.cuts += 1
+            if app.cuts >= 2:
+                for _ in range(50):
+                    ang = random.uniform(0, math.pi*2)
+                    app.canvas.create_line(cx - math.cos(ang)*radius, cy - math.sin(ang)*radius, cx + math.cos(ang)*radius, cy + math.sin(ang)*radius, fill="white")
+                app.canvas.create_text(cx, cy+250, text="100등분 케이크", fill="#ff5555", font=("Arial", 60, "bold"))
+                app.root.after(500, lambda: app.end_minigame(True))
+        app.start_pos = None
+
+    app.canvas.bind("<Button-1>", on_press)
+    app.canvas.bind("<ButtonRelease-1>", on_release)
+    app.set_time()
+
+def g_mash(app, key, title, target):
+    app.clear(); app.game_active = True; app.current_game_id = "mash"
+    app.clicks = 0
+    t_clicks = int(target + (app.speed * 2))
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 150, text=title, fill="yellow", font=("Arial", 60, "bold"))
+    cx, cy, bar_w = app.WIDTH / 2, app.HEIGHT / 2 + 50, 600
+    app.canvas.create_rectangle(cx - bar_w/2, cy, cx + bar_w/2, cy + 60, fill="#444444", outline="white")
+    gid = app.canvas.create_rectangle(cx - bar_w/2, cy, cx - bar_w/2, cy + 60, fill="#00ff00", outline="")
+    
+    def on_key(e):
+        if e.keysym.lower() == key.lower():
+            app.clicks += 1
+            app.canvas.coords(gid, cx - bar_w/2, cy, cx - bar_w/2 + min(bar_w, (app.clicks/t_clicks)*bar_w), cy + 60)
+            if app.clicks >= t_clicks: app.end_minigame(True)
+    app.root.bind("<Key>", on_key)
+    app.set_time()
+
+def g_avoid(app, count, homing):
+    app.clear(); app.game_active = True; app.current_game_id = "avoid"
+    text = "유도탄을 피해라!" if homing else "피해라!"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 150, text=text, fill="yellow", font=("Arial", 60, "bold"), tags="inst")
+    app.root.after(max(200, int(1000/app.speed)), lambda: app.canvas.delete("inst"))
+
+    app.enemies = []
+    for _ in range(count):
+        sx, sy = random.randint(100, app.WIDTH-100), random.randint(100, app.HEIGHT-100)
+        eid = app.canvas.create_rectangle(sx-20, sy-20, sx+20, sy+20, outline="red", width=3)
+        app.enemies.append({"id": eid, "dx": random.choice([-15, 15]), "dy": random.choice([-15, 15])})
+    
+    def on_motion(e):
+        if not app.game_active: return
+        for en in app.enemies:
+            c = app.canvas.coords(en["id"])
+            if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]: app.end_minigame(False)
+    app.root.bind("<Motion>", on_motion)
+
+    def move_enemy():
+        if not app.game_active or app.current_game_id != "avoid": return
+        mx, my = app.root.winfo_pointerx(), app.root.winfo_pointery()
+        for en in app.enemies:
+            c = app.canvas.coords(en["id"])
+            if not c: continue
+            if homing:
+                ex, ey = (c[0]+c[2])/2, (c[1]+c[3])/2
+                ang = math.atan2(my - ey, mx - ex)
+                en["dx"] = math.cos(ang) * 12 * app.speed
+                en["dy"] = math.sin(ang) * 12 * app.speed
+            else:
+                if c[0] + en["dx"] < 0 or c[2] + en["dx"] > app.WIDTH: en["dx"] *= -1
+                if c[1] + en["dy"] < 0 or c[3] + en["dy"] > app.HEIGHT: en["dy"] *= -1
+            app.canvas.move(en["id"], en["dx"], en["dy"])
+        app.root.after(max(15, int(40 / app.speed)), move_enemy)
+    move_enemy()
+    app.set_time()
+
+def g_count(app, min_t, max_t):
+    app.clear(); app.game_active = True; app.current_game_id = "count"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2, text="빨간 공은 몇 개?", fill="yellow", font=("Arial", 60, "bold"), tags="inst")
+    app.root.after(max(200, int(1000/app.speed)), lambda: app.canvas.delete("inst"))
+    
+    target = random.randint(min_t, max_t)
+    objs = []
+    for _ in range(random.randint(5, 12)):
+        x, y = random.randint(100, app.WIDTH-150), random.randint(150, app.HEIGHT-400)
+        objs.append(app.canvas.create_rectangle(x, y, x+50, y+50, fill="#2b5cff", outline=""))
+    for _ in range(target):
+        x, y = random.randint(100, app.WIDTH-150), random.randint(150, app.HEIGHT-400)
+        objs.append(app.canvas.create_oval(x, y, x+50, y+50, fill="#ff2b2b", outline="white"))
+        
+    choices = [target]
+    while len(choices) < 3:
+        w = random.randint(min_t, max_t+5)
+        if w not in choices: choices.append(w)
+    random.shuffle(choices)
+    
+    app.boxes = []
+    bw, bh, sp = 200, 100, (app.WIDTH - 600) // 4
+    for i, val in enumerate(choices):
+        cx, cy = sp * (i + 1) + bw * i, app.HEIGHT - 250
+        rid = app.canvas.create_rectangle(cx, cy, cx+bw, cy+bh, fill="white")
+        app.canvas.create_text(cx + bw/2, cy + bh/2, text=str(val), font=("Arial", 50, "bold"))
+        app.boxes.append((rid, val))
+        
+    def on_click(e):
+        for rid, val in app.boxes:
+            c = app.canvas.coords(rid)
+            if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]: app.end_minigame(val == target)
+    app.canvas.bind("<Button-1>", on_click)
+    app.set_time()
+
+def g_catch(app, pad_w, count):
+    app.clear(); app.game_active = True; app.current_game_id = "catch"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2, text="모두 받아라!", fill="yellow", font=("Arial", 60, "bold"), tags="inst")
+    app.root.after(max(200, int(1000/app.speed)), lambda: app.canvas.delete("inst"))
+    
+    pad = app.canvas.create_rectangle(app.WIDTH//2 - pad_w/2, app.HEIGHT - 120, app.WIDTH//2 + pad_w/2, app.HEIGHT - 90, fill="cyan")
+    items = []
+    for _ in range(count):
+        ix = random.randint(100, app.WIDTH-100)
+        iy = random.randint(0, 200) * -1
+        items.append(app.canvas.create_oval(ix-20, iy, ix+20, iy+40, fill="orange"))
+    
+    app.root.bind("<Motion>", lambda e: app.canvas.coords(pad, e.x - pad_w/2, app.HEIGHT - 120, e.x + pad_w/2, app.HEIGHT - 90))
+        
+    def drop_item():
+        if not app.game_active or app.current_game_id != "catch": return
+        pc = app.canvas.coords(pad)
+        for itm in items[:]:
+            app.canvas.move(itm, 0, 20 * app.speed)
+            c = app.canvas.coords(itm)
+            if c and pc:
+                if c[3] >= pc[1] and pc[0] <= c[2] and c[0] <= pc[2]: 
+                    app.canvas.delete(itm); items.remove(itm)
+                elif c[3] >= app.HEIGHT: return app.end_minigame(False)
+        if not items: return app.end_minigame(True)
+        app.root.after(30, drop_item)
+    drop_item()
+    app.set_time()
+
+def g_timing(app, spd_mul):
+    app.clear(); app.game_active = True; app.current_game_id = "timing"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 150, text="스페이스바로 초록색에 멈춰라!", fill="yellow", font=("Arial", 60, "bold"), tags="inst")
+    
+    tz_w = max(30, 150 - (app.speed * 15))
+    tx1, tx2 = app.WIDTH/2 - tz_w, app.WIDTH/2 + tz_w
+    app.canvas.create_rectangle(tx1, app.HEIGHT/2 - 60, tx2, app.HEIGHT/2 + 60, fill="green", width=4)
+    
+    bar = app.canvas.create_rectangle(0, app.HEIGHT/2 - 80, 20, app.HEIGHT/2 + 80, fill="red")
+    app.bpos, app.bdir = 0, 1
+    app.bspd = min(70, 30 * app.speed * spd_mul)
+    
+    def move_bar():
+        if not app.game_active or app.current_game_id != "timing": return
+        app.bpos += app.bdir * app.bspd
+        if app.bpos > app.WIDTH or app.bpos < 0: app.bdir *= -1
+        app.canvas.coords(bar, app.bpos - 10, app.HEIGHT/2 - 80, app.bpos + 10, app.HEIGHT/2 + 80)
+        app.root.after(30, move_bar)
+        
+    app.root.bind("<Key>", lambda e: app.end_minigame(tx1 <= app.bpos <= tx2) if e.keysym.lower() == 'space' else None)
+    move_bar()
+    app.set_time()
+
+def g_laser(app, count):
+    app.clear(); app.game_active = True; app.current_game_id = "laser"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 250, text="WASD로 피하라!", fill="yellow", font=("Arial", 60, "bold"), tags="inst")
+    px, py = app.WIDTH/2, app.HEIGHT/2
+    player = app.canvas.create_rectangle(px-20, py-20, px+20, py+20, fill="cyan", outline="white", width=2)
+    
+    app.keys = set()
+    app.root.bind("<KeyPress>", lambda e: app.keys.add(e.keysym.lower()))
+    app.root.bind("<KeyRelease>", lambda e: app.keys.discard(e.keysym.lower()))
+    
+    def move_player():
+        if not app.game_active or app.current_game_id != "laser": return
+        dx = dy = 0
+        if 'w' in app.keys: dy -= 15 * app.speed
+        if 's' in app.keys: dy += 15 * app.speed
+        if 'a' in app.keys: dx -= 15 * app.speed
+        if 'd' in app.keys: dx += 15 * app.speed
+        c = app.canvas.coords(player)
+        if c:
+            if c[0] + dx < 0 or c[2] + dx > app.WIDTH: dx = 0
+            if c[1] + dy < 0 or c[3] + dy > app.HEIGHT: dy = 0
+            app.canvas.move(player, dx, dy)
+        app.root.after(30, move_player)
+    move_player()
+    
+    lasers = []
+    def spawn():
+        if not app.game_active or app.current_game_id != "laser": return
+        lids = []
+        for _ in range(count):
+            if random.choice([True, False]):
+                y = random.randint(100, app.HEIGHT-100)
+                lids.append(app.canvas.create_rectangle(0, y-25, app.WIDTH, y+25, fill="", outline="red", dash=(10,10), width=3))
+            else:
+                x = random.randint(100, app.WIDTH-100)
+                lids.append(app.canvas.create_rectangle(x-25, 0, x+25, app.HEIGHT, fill="", outline="red", dash=(10,10), width=3))
+        for lid in lids: lasers.append({"id": lid, "active": False})
+        app.root.after(max(400, int(1000/app.speed)), lambda: activate(lids))
+        app.root.after(max(400, int(1200/app.speed)), spawn)
+        
+    def activate(lids):
+        if not app.game_active: return
+        for lid in lids:
+            app.canvas.itemconfig(lid, fill="red", dash=(), outline="")
+            for l in lasers:
+                if l["id"] == lid: l["active"] = True
+            app.root.after(300, lambda l=lid: app.canvas.delete(l))
+            
+    def check():
+        if not app.game_active or app.current_game_id != "laser": return
+        pc = app.canvas.coords(player)
+        if pc:
+            for l in lasers:
+                if l["active"]:
+                    lc = app.canvas.coords(l["id"])
+                    if lc and not (pc[2] < lc[0] or pc[0] > lc[2] or pc[3] < lc[1] or pc[1] > lc[3]):
+                        return app.end_minigame(False)
+        app.root.after(50, check)
+        
+    spawn(); check()
+    app.set_time()
+
+def g_find(app, grid_size):
+    app.clear(); app.game_active = True; app.current_game_id = "find"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 300, text="다른 색을 찾아라!", fill="yellow", font=("Arial", 60, "bold"))
+    cw, pad = 50, 10
+    tw = grid_size * cw + (grid_size - 1) * pad
+    sx, sy = app.WIDTH/2 - tw/2, app.HEIGHT/2 - tw/2 + 50
+    r, g, b = random.randint(50, 200), random.randint(50, 200), random.randint(50, 200)
+    diff = max(5, int(30 / app.speed))
+    c1 = f"#{r:02x}{g:02x}{b:02x}"; c2 = f"#{min(255,r+diff):02x}{min(255,g+diff):02x}{min(255,b+diff):02x}"
+    tr, tc = random.randint(0, grid_size-1), random.randint(0, grid_size-1)
+    
+    app.circles = []
+    for row in range(grid_size):
+        for col in range(grid_size):
+            x, y = sx + col * (cw + pad), sy + row * (cw + pad)
+            cid = app.canvas.create_oval(x, y, x+cw, y+cw, fill=c2 if (row==tr and col==tc) else c1, outline="")
+            app.circles.append((cid, row==tr and col==tc))
+            
+    def on_click(e):
+        for cid, tgt in app.circles:
+            c = app.canvas.coords(cid)
+            if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]: return app.end_minigame(tgt)
+    app.canvas.bind("<Button-1>", on_click)
+    app.set_time()
+
+def g_math(app, mode):
+    app.clear(); app.game_active = True; app.current_game_id = "math"
+    if mode == 'add': a, b, op = random.randint(1, 4), random.randint(1, 4), '+'; ans = a+b
+    elif mode == 'sub': a, b, op = random.randint(5, 9), random.randint(1, 4), '-'; ans = a-b
+    else: a, b, op = random.randint(2, 5), random.randint(2, 5), 'x'; ans = a*b
+    
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 100, text="계산해라!", fill="yellow", font=("Arial", 60, "bold"))
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 + 50, text=f"{a} {op} {b} = ?", fill="white", font=("Arial", 100, "bold"))
+    app.root.bind("<Key>", lambda e: app.end_minigame(e.char == str(ans)) if e.char.isdigit() else None)
+    app.set_time()
+
+def g_dont_move(app):
+    app.clear(); app.game_active = True; app.current_game_id = "dont_move"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2, text="마우스를 건드리지 마라!", fill="yellow", font=("Arial", 80, "bold"))
+    app.sx, app.sy = app.root.winfo_pointerx(), app.root.winfo_pointery()
+    
+    def check():
+        if not app.game_active or app.current_game_id != "dont_move": return
+        cx, cy = app.root.winfo_pointerx(), app.root.winfo_pointery()
+        if abs(cx - app.sx) > 20 or abs(cy - app.sy) > 20: return app.end_minigame(False)
+        app.root.after(50, check)
+    app.root.after(500, check)
+    app.set_time()
+
+def g_spam(app, target, moving):
+    app.clear(); app.game_active = True; app.current_game_id = "spam"
+    t_clicks = int(target + (app.speed * 3))
+    app.clicks = 0
+    app.canvas.create_text(app.WIDTH/2, 100, text="마구 클릭해라!", fill="yellow", font=("Arial", 60, "bold"))
+    bw, bh = 300, 150
+    app.bx, app.by = app.WIDTH/2 - bw/2, app.HEIGHT/2
+    btn = app.canvas.create_rectangle(app.bx, app.by, app.bx+bw, app.by+bh, fill="purple", outline="white", width=5)
+    txt = app.canvas.create_text(app.bx+bw/2, app.by+bh/2, text=f"0 / {t_clicks}", fill="white", font=("Arial", 50, "bold"))
+    
+    def on_click(e):
+        if app.bx <= e.x <= app.bx+bw and app.by <= e.y <= app.by+bh:
+            app.clicks += 1
+            app.canvas.itemconfig(txt, text=f"{app.clicks} / {t_clicks}")
+            if moving:
+                app.bx, app.by = random.randint(100, app.WIDTH-bw-100), random.randint(200, app.HEIGHT-bh-100)
+                app.canvas.coords(btn, app.bx, app.by, app.bx+bw, app.by+bh)
+                app.canvas.coords(txt, app.bx+bw/2, app.by+bh/2)
+            if app.clicks >= t_clicks: app.end_minigame(True)
+    app.canvas.bind("<Button-1>", on_click)
+    app.set_time()
+
+# 완벽하게 버그 수정된 타입 함수냥♡
+def g_type(app, length, num):
+    app.clear(); app.game_active = True; app.current_game_id = "type"
+    
+    # 윈도우 창이 무조건 키보드 입력을 받도록 강제 집중시킵니다냥♡
+    app.root.focus_force() 
+    
+    pool = "0123456789" if num else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    word = "".join(random.choices(pool, k=length))
+    app.typed = ""
+    
+    title = "비밀번호를 쳐라!" if num else "키보드로 쳐라!"
+    app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 - 150, text=title, fill="yellow", font=("Arial", 60, "bold"))
+    
+    # 에러의 주범이었던 "spacing3"를 완벽히 제거했습니다냥♡
+    txt_id = app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2, text=word, fill="white", font=("Arial", 100, "bold"))
+    fb_id = app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2 + 150, text="입력 대기중...", fill="gray", font=("Arial", 40))
+    
+    kor_to_eng = {
+        'ㅂ':'Q', 'ㅈ':'W', 'ㄷ':'E', 'ㄱ':'R', 'ㅅ':'T', 'ㅛ':'Y', 'ㅕ':'U', 'ㅑ':'I', 'ㅐ':'O', 'ㅔ':'P',
+        'ㅁ':'A', 'ㄴ':'S', 'ㅇ':'D', 'ㄹ':'F', 'ㅎ':'G', 'ㅗ':'H', 'ㅓ':'J', 'ㅏ':'K', 'ㅣ':'L',
+        'ㅋ':'Z', 'ㅌ':'X', 'ㅊ':'C', 'ㅍ':'V', 'ㅠ':'B', 'ㅜ':'N', 'ㅡ':'M'
+    }
+    
+    def on_key(e):
+        if not app.game_active: return
+        try:
+            char = e.char.upper()
+            if not char: 
+                char = e.keysym.upper()
+                
+            if char.startswith("KP_"): char = char.replace("KP_", "")
+            if char in kor_to_eng: char = kor_to_eng[char]
+            
+            if not char or len(char) != 1 or char not in pool: return
+            
+            app.canvas.itemconfig(fb_id, text=f"입력: {char}")
+            if char == word[len(app.typed)]:
+                app.typed += char
+                app.canvas.itemconfig(txt_id, text=app.typed + word[len(app.typed):], fill="green")
+                app.canvas.itemconfig(fb_id, fill="green")
+                if len(app.typed) == len(word): app.end_minigame(True)
+            else:
+                app.canvas.itemconfig(fb_id, fill="red")
+                app.end_minigame(False)
+        except Exception:
+            pass # 혹시 모를 내부 에러가 나도 게임이 멈추지 않게 보호합니다냥♡
+            
+    app.root.bind("<Key>", on_key)
+    app.set_time()
+
+def g_memory(app, count):
+    app.clear(); app.game_active = True; app.current_game_id = "hidden"
+    app.canvas.create_text(app.WIDTH/2, 150, text="위치를 기억해라!", fill="yellow", font=("Arial", 60, "bold"))
+    boxes = []
+    for i in range(count):
+        x, y = random.randint(100, app.WIDTH-100), random.randint(250, app.HEIGHT-250)
+        bid = app.canvas.create_rectangle(x, y, x+80, y+80, fill="#00ff00" if i==0 else "#0055ff", outline="")
+        boxes.append({"id": bid, "real": (i==0), "c": (x, y, x+80, y+80)})
+        
+    def hide():
+        if not app.game_active: return
+        for b in boxes: app.canvas.itemconfig(b["id"], fill="#1e1e1e")
+        app.canvas.bind("<Button-1>", lambda e: check(e))
+        
+    def check(e):
+        for b in boxes:
+            if b["c"][0] <= e.x <= b["c"][2] and b["c"][1] <= e.y <= b["c"][3]: return app.end_minigame(b["real"])
+        app.end_minigame(False)
+        
+    app.root.after(max(400, int(1500/app.speed)), hide) 
+    app.set_time()
+
+def g_clean(app, count):
+    app.clear(); app.game_active = True; app.current_game_id = "clean"
+    app.canvas.create_text(app.WIDTH/2, 100, text="마우스로 닦아라!", fill="yellow", font=("Arial", 60, "bold"))
+    dirts = []
+    for _ in range(count):
+        x, y = random.randint(100, app.WIDTH-100), random.randint(200, app.HEIGHT-150)
+        dirts.append(app.canvas.create_oval(x-30, y-30, x+30, y+30, fill="#3b2b1a", outline=""))
+        
+    def on_motion(e):
+        for did in dirts[:]:
+            c = app.canvas.coords(did)
+            if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]:
+                app.canvas.delete(did); dirts.remove(did)
+        if not dirts: app.end_minigame(True)
+    app.root.bind("<Motion>", on_motion)
+    app.set_time()
+
+def g_stopwatch(app):
+    app.clear(); app.game_active = True; app.current_game_id = "stopwatch"
+    app.canvas.create_text(app.WIDTH/2, 150, text="정확히 2.5 ~ 3.0초 사이에 멈춰라!", fill="yellow", font=("Arial", 60, "bold"))
+    txt = app.canvas.create_text(app.WIDTH/2, app.HEIGHT/2, text="0.00", fill="white", font=("Arial", 120, "bold"))
+    app.sw_time = 0.0
+    
+    def tick():
+        if not app.game_active or app.current_game_id != "stopwatch": return
+        app.sw_time += 0.05 * app.speed
+        app.canvas.itemconfig(txt, text=f"{app.sw_time:.2f}")
+        app.root.after(50, tick)
+        
+    app.root.bind("<Key>", lambda e: app.end_minigame(2.5 <= app.sw_time <= 3.0) if e.keysym.lower() == 'space' else None)
+    tick(); app.set_time()
+
+def g_jump(app):
+    app.clear(); app.game_active = True; app.current_game_id = "jump"
+    app.canvas.create_text(app.WIDTH/2, 150, text="스페이스바로 뛰어넘어라!", fill="yellow", font=("Arial", 60, "bold"))
+    app.canvas.create_line(0, app.HEIGHT/2+50, app.WIDTH, app.HEIGHT/2+50, fill="white", width=5)
+    
+    p_y = app.HEIGHT/2
+    player = app.canvas.create_rectangle(200, p_y-50, 250, p_y+50, fill="cyan")
+    enemy = app.canvas.create_rectangle(app.WIDTH, p_y, app.WIDTH+50, p_y+50, fill="red")
+    
+    app.vy = 0; app.is_jump = False
+    def jump(e):
+        if e.keysym.lower() == 'space' and not app.is_jump:
+            app.vy = -25; app.is_jump = True
+    app.root.bind("<Key>", jump)
+    
+    def update():
+        if not app.game_active or app.current_game_id != "jump": return
+        if app.is_jump:
+            app.vy += 2
+            app.canvas.move(player, 0, app.vy)
+            pc = app.canvas.coords(player)
+            if pc and pc[3] >= p_y+50:
+                app.canvas.coords(player, 200, p_y-50, 250, p_y+50)
+                app.vy = 0; app.is_jump = False
+                
+        app.canvas.move(enemy, -25 * app.speed, 0)
+        ec = app.canvas.coords(enemy)
+        if ec and ec[2] < 0: return app.end_minigame(True)
+        
+        pc = app.canvas.coords(player)
+        if pc and ec and not (pc[2] < ec[0] or pc[0] > ec[2] or pc[3] < ec[1] or pc[1] > ec[3]):
+            return app.end_minigame(False)
+        app.root.after(30, update)
+        
+    update(); app.set_time()
+
+def g_balance(app):
+    app.clear(); app.game_active = True; app.current_game_id = "balance"
+    app.canvas.create_text(app.WIDTH/2, 150, text="마우스를 파란 원 안에 유지해라!", fill="yellow", font=("Arial", 60, "bold"))
+    cx, cy = app.WIDTH/2, app.HEIGHT/2
+    circle = app.canvas.create_oval(cx-100, cy-100, cx+100, cy+100, outline="blue", width=5)
+    
+    def check(e):
+        if not app.game_active: return
+        cc = app.canvas.coords(circle)
+        if cc:
+            cen_x, cen_y = (cc[0]+cc[2])/2, (cc[1]+cc[3])/2
+            if math.dist((e.x, e.y), (cen_x, cen_y)) > 100: app.end_minigame(False)
+    app.root.bind("<Motion>", check)
+    
+    def move_circle():
+        if not app.game_active or app.current_game_id != "balance": return
+        app.canvas.move(circle, random.choice([-20, 20])*app.speed, random.choice([-20, 20])*app.speed)
+        app.root.after(max(50, int(150/app.speed)), move_circle)
+    move_circle(); app.set_time()
+
+# ================= 보스전 =================
+def boss_1(app):
+    app.clear(); app.game_active = True; app.current_game_id = "boss"
+    app.time_left = 20.0; app.boss_hits = 0; b_size = 200
+    app.canvas.create_text(app.WIDTH/2, 80, text="CH 1 BOSS! 10번 때려라!", fill="red", font=("Arial", 40, "bold"))
+    htxt = app.canvas.create_text(app.WIDTH/2, 130, text="Hits: 0 / 10", fill="white", font=("Arial", 30))
+    app.bx, app.by = app.WIDTH/2, app.HEIGHT/2
+    bid = app.canvas.create_oval(app.bx-b_size/2, app.by-b_size/2, app.bx+b_size/2, app.by+b_size/2, fill="#880000", outline="red", width=5)
+    bullets = []
+    
+    def on_click(e):
+        if not app.game_active: return
+        c = app.canvas.coords(bid)
+        if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]:
+            app.boss_hits += 1; app.canvas.itemconfig(htxt, text=f"Hits: {app.boss_hits} / 10")
+            if app.boss_hits >= 10: app.end_minigame(True)
+            else:
+                app.bx, app.by = random.randint(200, app.WIDTH-200), random.randint(250, app.HEIGHT-250)
+                app.canvas.coords(bid, app.bx-b_size/2, app.by-b_size/2, app.bx+b_size/2, app.by+b_size/2)
+    app.canvas.bind("<Button-1>", on_click)
+    
+    def update():
+        if not app.game_active or app.current_game_id != "boss": return
+        if random.random() < 0.05 * app.speed:
+            ang = random.uniform(0, math.pi * 2); spd = random.randint(10, 15) * app.speed
+            b = app.canvas.create_oval(app.bx-10, app.by-10, app.bx+10, app.by+10, fill="orange", outline="")
+            bullets.append({"id": b, "dx": math.cos(ang)*spd, "dy": math.sin(ang)*spd})
+        for b in bullets[:]:
+            app.canvas.move(b["id"], b["dx"], b["dy"])
+            c = app.canvas.coords(b["id"])
+            if c and (c[2] < 0 or c[0] > app.WIDTH or c[3] < 0 or c[1] > app.HEIGHT):
+                app.canvas.delete(b["id"]); bullets.remove(b)
+        app.root.after(30, update)
+    app.root.bind("<Motion>", lambda e: app.end_minigame(False) if any(c := app.canvas.coords(b["id"]) for b in bullets if c and c[0]<=e.x<=c[2] and c[1]<=e.y<=c[3]) else None)
+    update(); app.tick_timer()
+
+def boss_2(app):
+    app.clear(); app.game_active = True; app.current_game_id = "boss_ch2"
+    app.time_left = 20.0; app.boss_hits = 0; b_size = 100
+    app.canvas.create_text(app.WIDTH/2, 80, text="CH 2 BOSS! 15번 때려라!", fill="magenta", font=("Arial", 40, "bold"))
+    htxt = app.canvas.create_text(app.WIDTH/2, 130, text="Hits: 0 / 15", fill="white", font=("Arial", 30))
+    app.bx, app.by = app.WIDTH/2, app.HEIGHT/2
+    bid = app.canvas.create_oval(app.bx-b_size/2, app.by-b_size/2, app.bx+b_size/2, app.by+b_size/2, fill="#00ffff", outline="blue", width=5)
+    
+    def on_click(e):
+        if not app.game_active: return
+        c = app.canvas.coords(bid)
+        if c and c[0] <= e.x <= c[2] and c[1] <= e.y <= c[3]:
+            app.boss_hits += 1; app.canvas.itemconfig(htxt, text=f"Hits: {app.boss_hits} / 15")
+            if app.boss_hits >= 15: app.end_minigame(True)
+            else:
+                app.bx, app.by = random.randint(100, app.WIDTH-100), random.randint(200, app.HEIGHT-200)
+                app.canvas.coords(bid, app.bx-b_size/2, app.by-b_size/2, app.bx+b_size/2, app.by+b_size/2)
+    app.canvas.bind("<Button-1>", on_click)
+    
+    def move():
+        if not app.game_active or app.current_game_id != "boss_ch2": return
+        app.bx += random.choice([-25, 25]) * app.speed
+        app.by += random.choice([-25, 25]) * app.speed
+        app.bx = max(100, min(app.WIDTH-100, app.bx))
+        app.by = max(200, min(app.HEIGHT-200, app.by))
+        app.canvas.coords(bid, app.bx-b_size/2, app.by-b_size/2, app.bx+b_size/2, app.by+b_size/2)
+        app.root.after(max(20, int(50/app.speed)), move)
+    move(); app.tick_timer()
