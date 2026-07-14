@@ -1,0 +1,219 @@
+import tkinter as tk
+import random
+import games
+
+class MicroGameApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("조여라! 마이크로게임")
+        self.root.attributes('-fullscreen', True)
+        self.root.update_idletasks()
+        self.WIDTH = self.root.winfo_screenwidth()
+        self.HEIGHT = self.root.winfo_screenheight()
+        self.root.bind("<Escape>", lambda e: self.root.destroy())
+        
+        self.canvas = tk.Canvas(root, width=self.WIDTH, height=self.HEIGHT, bg="#1e1e1e", highlightthickness=0)
+        self.canvas.pack()
+        
+        self.timer_job = None
+        self.game_active = False
+        self.current_game_id = None
+        self.game_pool = []
+        
+        self.unlocked_ch2 = False
+        self.unlocked_endless = False
+        
+        self.show_main_menu()
+
+    def clear(self):
+        self.canvas.delete("all")
+        if self.timer_job:
+            self.root.after_cancel(self.timer_job)
+            self.timer_job = None
+
+    def unbind_all(self):
+        for seq in ["<Key>", "<space>", "<Motion>", "<KeyPress>", "<KeyRelease>", "<B1-Motion>", "<ButtonRelease-1>", "<Button-1>"]:
+            self.root.unbind(seq)
+            self.canvas.unbind(seq)
+
+    # --- 메인 메뉴 및 로비 ---
+    def show_main_menu(self):
+        self.clear(); self.unbind_all()
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/3, text="조여라! 마이크로게임", fill="white", font=("Arial", 80, "bold"))
+        self.btn_play = self.create_button(self.WIDTH/2 - 150, self.HEIGHT/2, 300, 80, "게임 시작", self.show_lobby)
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT - 50, text="게임을 종료하려면 ESC 키를 누르세요", fill="gray", font=("Arial", 20))
+        self.root.bind("<Button-1>", self.handle_menu_click)
+
+    def show_lobby(self):
+        self.clear()
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/4, text="모드 선택", fill="yellow", font=("Arial", 60, "bold"))
+        
+        self.btn_ch1 = self.create_button(self.WIDTH/2 - 400, self.HEIGHT/2, 200, 100, "챕터 1", lambda: self.start_game_sequence("CH1"))
+        
+        ch2_txt = "챕터 2" if self.unlocked_ch2 else "🔒 챕터 2"
+        ch2_act = (lambda: self.start_game_sequence("CH2")) if self.unlocked_ch2 else None
+        self.btn_ch2 = self.create_button(self.WIDTH/2 - 100, self.HEIGHT/2, 200, 100, ch2_txt, ch2_act)
+        
+        end_txt = "무한 모드" if self.unlocked_endless else "🔒 무한 모드"
+        end_act = (lambda: self.start_game_sequence("ENDLESS")) if self.unlocked_endless else None
+        self.btn_endless = self.create_button(self.WIDTH/2 + 200, self.HEIGHT/2, 200, 100, end_txt, end_act)
+        
+        self.btn_back = self.create_button(self.WIDTH/2 - 150, self.HEIGHT - 150, 300, 80, "뒤로 가기", self.show_main_menu)
+        self.root.bind("<Button-1>", self.handle_lobby_click)
+
+    def create_button(self, x, y, w, h, text, action):
+        self.canvas.create_rectangle(x, y, x+w, y+h, fill="#444444" if action else "#222222", outline="white", width=3)
+        self.canvas.create_text(x+w/2, y+h/2, text=text, fill="white" if action else "gray", font=("Arial", 25, "bold"))
+        return {"action": action, "coords": (x, y, x+w, y+h)}
+
+    def handle_menu_click(self, event):
+        x1, y1, x2, y2 = self.btn_play["coords"]
+        if x1 <= event.x <= x2 and y1 <= event.y <= y2: self.btn_play["action"]()
+
+    def handle_lobby_click(self, event):
+        for btn in [self.btn_ch1, self.btn_ch2, self.btn_endless, self.btn_back]:
+            if btn["action"]:
+                x1, y1, x2, y2 = btn["coords"]
+                if x1 <= event.x <= x2 and y1 <= event.y <= y2: btn["action"]()
+
+    def start_game_sequence(self, mode):
+        self.root.unbind("<Button-1>")
+        self.mode = mode
+        self.stage = 1
+        self.lives = 4
+        self.speed = 1.0 
+        self.score = 0
+        
+        if mode == "CH1": self.game_pool = games.get_ch1_games()
+        elif mode == "CH2": self.game_pool = games.get_ch2_games()
+        else: self.game_pool = games.get_ch1_games() + games.get_ch2_games() + games.get_endless_games()
+        
+        random.shuffle(self.game_pool)
+        self.show_stage_intro()
+
+    # --- 시스템 ---
+    def show_stage_intro(self):
+        self.clear(); self.unbind_all(); self.game_active = False
+        
+        if self.lives <= 0:
+            self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 - 120, text="GAME OVER", fill="red", font=("Arial", 80, "bold"))
+            self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 - 20, text=f"Final Score: {self.score}", fill="white", font=("Arial", 40))
+            btn_w, btn_h = 400, 100
+            bx, by = self.WIDTH/2 - btn_w/2, self.HEIGHT/2 + 60
+            self.canvas.create_rectangle(bx, by, bx+btn_w, by+btn_h, fill="white")
+            self.canvas.create_text(self.WIDTH/2, by + btn_h/2, text="로비로 돌아가기", fill="black", font=("Arial", 30, "bold"))
+            self.canvas.bind("<Button-1>", lambda e: self.show_lobby() if bx <= e.x <= bx+btn_w and by <= e.y <= by+btn_h else None)
+            return
+
+        if self.stage > 1 and (self.stage - 1) % 4 == 0:
+            self.speed += 0.3
+            self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2, text="SPEED UP!", fill="yellow", font=("Arial", 100, "bold"))
+            self.root.after(1500, self.ready_screen)
+        else:
+            self.ready_screen()
+
+    def ready_screen(self):
+        self.clear()
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 - 60, text=f"Stage {self.stage}", fill="white", font=("Arial", 60, "bold"))
+        hearts = "♥ " * self.lives + "♡ " * (4 - self.lives)
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 + 30, text=f"내 체력: {hearts}", fill="red", font=("Arial", 40, "bold"))
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 + 100, text=f"Speed: {self.speed:.1f}x", fill="gray", font=("Arial", 30))
+        self.root.after(1500, self.choose_minigame)
+
+    def choose_minigame(self):
+        # 챕터 1, 2는 15스테이지가 보스전
+        if self.stage == 15 and self.mode in ["CH1", "CH2"]:
+            self.show_boss_intro()
+        else:
+            if not self.game_pool and self.mode == "ENDLESS":
+                self.game_pool = games.get_ch1_games() + games.get_ch2_games() + games.get_endless_games()
+                random.shuffle(self.game_pool)
+                
+            if self.game_pool:
+                func = self.game_pool.pop()
+                func(self)
+            else:
+                self.show_game_clear()
+
+    def show_boss_intro(self):
+        self.clear()
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2, text="보스 스테이지!!", fill="red", font=("Arial", 100, "bold"))
+        self.root.after(2500, lambda: games.boss_1(self) if self.mode == "CH1" else games.boss_2(self))
+
+    def update_rope_ui(self):
+        self.canvas.delete("rope_ui")
+        burn_ratio = 1.0 - (self.time_left / 6.0)
+        bomb_x, bomb_y = self.WIDTH - 100, self.HEIGHT - 40
+        current_x = bomb_x * burn_ratio
+        
+        self.canvas.create_line(0, bomb_y, current_x, bomb_y, fill="#333333", width=15, tags="rope_ui")
+        self.canvas.create_line(current_x, bomb_y, bomb_x, bomb_y, fill="#8B4513", width=15, tags="rope_ui")
+        self.canvas.create_oval(current_x-15, bomb_y-15, current_x+15, bomb_y+15, fill="orange", outline="yellow", width=2, tags="rope_ui")
+        self.canvas.create_oval(bomb_x, bomb_y-40, bomb_x+80, bomb_y+40, fill="black", tags="rope_ui")
+        self.canvas.create_text(bomb_x+40, bomb_y, text="공겜", fill="white", font=("Arial", 16, "bold"), tags="rope_ui")
+
+    def set_time(self):
+        self.time_left = 6.0 
+        self.tick_timer()
+
+    def tick_timer(self):
+        if not self.game_active: return
+        # 스피드업에 비례해서 시간이 더 빨리 깎이도록 수정! (숫자가 빠르게 줄어듭니다)
+        self.time_left -= 0.1 * self.speed
+        
+        self.canvas.delete("timer_text")
+        self.canvas.create_text(150, 80, text=f"Time: {max(0, self.time_left):.1f}", fill="white", font=("Arial", 30, "bold"), tags="timer_text")
+        self.update_rope_ui()
+        
+        if self.time_left <= 0:
+            self.game_active = False
+            self.show_explosion()
+            survive_games = ["avoid", "dont_move", "laser", "balance", "jump"]
+            self.root.after(600, lambda: self.end_minigame(self.current_game_id in survive_games))
+        else:
+            self.timer_job = self.root.after(100, self.tick_timer)
+
+    def show_explosion(self):
+        self.canvas.delete("rope_ui")
+        bx, by = self.WIDTH - 60, self.HEIGHT - 40
+        self.canvas.create_oval(bx-80, by-80, bx+80, by+80, fill="orange", outline="red", width=5, tags="explosion_ui")
+        self.canvas.create_text(bx, by, text="쾅!", fill="red", font=("Arial", 40, "bold"), tags="explosion_ui")
+
+    def end_minigame(self, success):
+        self.game_active = False
+        self.current_game_id = None
+        self.clear(); self.unbind_all()
+        
+        if success:
+            self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2, text="SUCCESS!", fill="#00ff00", font=("Arial", 80, "bold"))
+            self.score += 1
+        else:
+            self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2, text="FAIL...", fill="#ff0000", font=("Arial", 80, "bold"))
+            self.lives -= 1
+            
+        # 챕터 모드에서 스테이지 15(보스)를 넘기면 클리어
+        if self.stage >= 15 and self.mode in ["CH1", "CH2"] and self.lives > 0:
+            self.root.after(1500, self.show_game_clear)
+        elif self.lives <= 0:
+            self.root.after(1500, self.show_stage_intro)
+        else:
+            self.stage += 1
+            self.root.after(1500, self.show_stage_intro)
+
+    def show_game_clear(self):
+        self.clear(); self.unbind_all()
+        self.canvas.create_text(self.WIDTH/2, self.HEIGHT/2 - 120, text="CHAPTER CLEAR!", fill="#00ff00", font=("Arial", 80, "bold"))
+        
+        if self.mode == "CH1": self.unlocked_ch2 = True
+        elif self.mode == "CH2": self.unlocked_endless = True
+        
+        btn_w, btn_h = 400, 100
+        bx, by = self.WIDTH/2 - btn_w/2, self.HEIGHT/2 + 60
+        self.canvas.create_rectangle(bx, by, bx+btn_w, by+btn_h, fill="white")
+        self.canvas.create_text(self.WIDTH/2, by + btn_h/2, text="로비로 돌아가기", fill="black", font=("Arial", 30, "bold"))
+        self.canvas.bind("<Button-1>", lambda e: self.show_lobby() if bx <= e.x <= bx+btn_w and by <= e.y <= by+btn_h else None)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = MicroGameApp(root)
+    root.mainloop()
